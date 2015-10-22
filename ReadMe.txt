@@ -15,3 +15,5 @@
 10-22,update:
     basic/NonCopyable:禁止复制类
     basic/IocContainer.cpp: ioc容器的简单实现
+    basic/my_dll_helper:dll帮助类，简化dll调用
+    basic/Timer.hpp:简单计时器的实现
