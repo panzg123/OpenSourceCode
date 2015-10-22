@@ -17,3 +17,4 @@
     basic/IocContainer.cpp: ioc容器的简单实现
     basic/my_dll_helper:dll帮助类，简化dll调用
     basic/Timer.hpp:简单计时器的实现
+    basic/Format.hpp 格式化类
