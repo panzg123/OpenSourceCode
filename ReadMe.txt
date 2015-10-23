@@ -18,3 +18,4 @@
     basic/my_dll_helper:dll帮助类，简化dll调用
     basic/Timer.hpp:简单计时器的实现
     basic/Format.hpp 格式化类
+	basic/var_templatec.cpp 简单的可变参数模板函数、模板类的demo
