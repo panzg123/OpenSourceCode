@@ -19,3 +19,6 @@
     basic/Timer.hpp:简单计时器的实现
     basic/Format.hpp 格式化类
 	basic/var_templatec.cpp 简单的可变参数模板函数、模板类的demo
+
+10-25,update:
+    Sqlite_helper: sqlite的封装，用到了rapidjson
