@@ -1,4 +1,4 @@
-收集的开源代码
+开源代码
 09-01,update:
 	numerical_compution:常见的数值计算代码
 	
