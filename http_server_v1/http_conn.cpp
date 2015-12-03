@@ -38,12 +38,13 @@ void removefd( int epollfd, int fd )
     epoll_ctl( epollfd, EPOLL_CTL_DEL, fd, 0 );
     close( fd );
 }
-/*修改fd在epoll中的事件*/
+/*修改fd在epoll中的事件，在这里控制socket上的读写事件*/
 void modfd( int epollfd, int fd, int ev )
 {
     epoll_event event;
     event.data.fd = fd;
     event.events = ev | EPOLLET | EPOLLONESHOT | EPOLLRDHUP;
+    //epoll_ctl该函数用于控制某个epoll文件描述符上的事件，可以注册事件，修改事件，删除事件。 
     epoll_ctl( epollfd, EPOLL_CTL_MOD, fd, &event );
 }
 /*静态成员，类外初始化*/

@@ -1,10 +1,16 @@
+/*
+ * locker.h
+ *
+ *  Created on: 2015年11月30日
+ *      Author: panzg
+ */
 #ifndef LOCKER_H
 #define LOCKER_H
 
 #include <exception>
 #include <pthread.h>
 #include <semaphore.h>
-
+//加锁
 class sem
 {
 public:
