@@ -138,7 +138,7 @@ int main() {
         response << "HTTP/1.1 400 Bad Request\r\nContent-Length: " << content.length() << "\r\n\r\n" << content;
     };
     //[p]启动服务器线程
-    thread server_thread([&server](){,t
+    thread server_thread([&server](){
         //Start server
         server.start();
     });
