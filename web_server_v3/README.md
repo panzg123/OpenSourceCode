@@ -3,7 +3,21 @@ Simple-Web-Server
 ###源码阅读，注释，学习
 
 ###原作者：[eidheim](https://github.com/eidheim/Simple-Web-Server/blob/master/server_http.hpp)
+###源码
+    src
+     |---client_http.hpp      http的客户端代码
+     |---client_https.hpp     https的客户端代码
+     |---server_http.hpp      http的服务器端代码
+     |---server_https.hpp     https的服务器端代码 
+     |---http_example.hpp   http的测试代码
+     |---https_example.hpp   https的测试代码
+     
+###编译：
+需要boost和c++11支持，同时链接:
 
+pthread,boost_regex,boost_filesystem,boost_coroutine,,boost_thread,boost_chrono,boost_context,boost_system
+
+https版本还需要依赖boost.ssl &open ssl
 *****
 
 

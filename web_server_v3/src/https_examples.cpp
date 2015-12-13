@@ -1,15 +1,12 @@
-/*p 这是测试demo*/
-#include "server_http.hpp"
-#include "client_http.hpp"
+#include "server_https.hpp"
+#include "client_https.hpp"
 
 //Added for the json-example
-//[p] 用boost/property来解析json
 #define BOOST_SPIRIT_THREADSAFE
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
 
 //Added for the default_resource example
-//[p]用boost/filesystem来解析资源文件路径
 #include <fstream>
 #include <boost/filesystem.hpp>
 
@@ -17,23 +14,20 @@ using namespace std;
 //Added for the json-example:
 using namespace boost::property_tree;
 
-typedef SimpleWeb::Server<SimpleWeb::HTTP> HttpServer;
-typedef SimpleWeb::Client<SimpleWeb::HTTP> HttpClient;
+typedef SimpleWeb::Server<SimpleWeb::HTTPS> HttpsServer;
+typedef SimpleWeb::Client<SimpleWeb::HTTPS> HttpsClient;
 
-#if 0
 int main() {
-    //HTTP-server at port 8080 using 4 threads
-	//[p] 监听8080端口，线程池启动4个线程
-    HttpServer server(8080, 4);
+    //HTTPS-server at port 8080 using 4 threads
+	//[p]用法和http一样，只有此处不同，传入ssl证书参数
+    HttpsServer server(8080, 4, "server.crt", "server.key");
     
     //Add resources using path-regex and method-string, and an anonymous function
     //POST-example for the path /string, responds the posted string
-    //[p]这是一个匿名函数，来处理POST请求中的string
-    server.resource["^/string$"]["POST"]=[](HttpServer::Response& response, shared_ptr<HttpServer::Request> request) {
+    server.resource["^/string$"]["POST"]=[](HttpsServer::Response& response, shared_ptr<HttpsServer::Request> request) {
         //Retrieve string:
         auto content=request->content.string();
         //request->content.string() is a convenience function for:
-        //[p]request->content.string()是content类的方法，实现了下面三行代码的功能
         //stringstream ss;
         //ss << request->content.rdbuf();
         //string content=ss.str();
@@ -49,13 +43,13 @@ int main() {
     //  "lastName": "Smith",
     //  "age": 25
     //}
-    server.resource["^/json$"]["POST"]=[](HttpServer::Response& response, shared_ptr<HttpServer::Request> request) {
+    server.resource["^/json$"]["POST"]=[](HttpsServer::Response& response, shared_ptr<HttpsServer::Request> request) {
         try {
             ptree pt;
             read_json(request->content, pt);
 
             string name=pt.get<string>("firstName")+" "+pt.get<string>("lastName");
-
+            
             response << "HTTP/1.1 200 OK\r\nContent-Length: " << name.length() << "\r\n\r\n" << name;
         }
         catch(exception& e) {
@@ -65,7 +59,7 @@ int main() {
     
     //GET-example for the path /info
     //Responds with request-information
-    server.resource["^/info$"]["GET"]=[](HttpServer::Response& response, shared_ptr<HttpServer::Request> request) {
+    server.resource["^/info$"]["GET"]=[](HttpsServer::Response& response, shared_ptr<HttpsServer::Request> request) {
         stringstream content_stream;
         content_stream << "<h1>Request from " << request->remote_endpoint_address << " (" << request->remote_endpoint_port << ")</h1>";
         content_stream << request->method << " " << request->path << " HTTP/" << request->http_version << "<br>";
@@ -81,7 +75,7 @@ int main() {
     
     //GET-example for the path /match/[number], responds with the matched string in path (number)
     //For instance a request GET /match/123 will receive: 123
-    server.resource["^/match/([0-9]+)$"]["GET"]=[](HttpServer::Response& response, shared_ptr<HttpServer::Request> request) {
+    server.resource["^/match/([0-9]+)$"]["GET"]=[](HttpsServer::Response& response, shared_ptr<HttpsServer::Request> request) {
         string number=request->path_match[1];
         response << "HTTP/1.1 200 OK\r\nContent-Length: " << number.length() << "\r\n\r\n" << number;
     };
@@ -90,7 +84,7 @@ int main() {
     //Will respond with content in the web/-directory, and its subdirectories.
     //Default file: index.html
     //Can for instance be used to retrieve an HTML 5 client that uses REST-resources on this server
-    server.default_resource["GET"]=[](HttpServer::Response& response, shared_ptr<HttpServer::Request> request) {
+    server.default_resource["GET"]=[](HttpsServer::Response& response, shared_ptr<HttpsServer::Request> request) {
         boost::filesystem::path web_root_path("web");
         if(!boost::filesystem::exists(web_root_path))
             cerr << "Could not find web root." << endl;
@@ -138,17 +132,18 @@ int main() {
         string content="Could not open path "+request->path;
         response << "HTTP/1.1 400 Bad Request\r\nContent-Length: " << content.length() << "\r\n\r\n" << content;
     };
-    //[p]启动服务器线程
+    
     thread server_thread([&server](){
         //Start server
         server.start();
     });
-    //[p]等待服务器开启
+    
     //Wait for server to start so that the client can connect
     this_thread::sleep_for(chrono::seconds(1));
     
     //Client examples
-    HttpClient client("localhost:8080");
+    //Second Client() parameter set to false: no certificate verification
+    HttpsClient client("localhost:8080", false);
     auto r1=client.request("GET", "/match/123");
     cout << r1->content.rdbuf() << endl;
 
@@ -160,9 +155,8 @@ int main() {
     ss.str(json);
     auto r3=client.request("POST", "/json", ss);
     cout << r3->content.rdbuf() << endl;
-        
+    
     server_thread.join();
     
     return 0;
 }
-#endif
