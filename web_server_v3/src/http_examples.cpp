@@ -137,12 +137,12 @@ int main() {
         string content="Could not open path "+request->path;
         response << "HTTP/1.1 400 Bad Request\r\nContent-Length: " << content.length() << "\r\n\r\n" << content;
     };
-    
-    thread server_thread([&server](){
+    //[p]启动服务器线程
+    thread server_thread([&server](){,t
         //Start server
         server.start();
     });
-    
+    //[p]等待服务器开启
     //Wait for server to start so that the client can connect
     this_thread::sleep_for(chrono::seconds(1));
     

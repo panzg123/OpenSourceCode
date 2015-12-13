@@ -11,20 +11,21 @@ namespace SimpleWeb {
     template <class socket_type>
     class ClientBase {
     public:
+    	//[p]内部类，HTTP响应结构体
         class Response {
             friend class ClientBase<socket_type>;
             
         public:
-            std::string http_version, status_code;
+            std::string http_version, status_code;      //[p]HTTP协议版本，状态码
 
-            std::istream content;
+            std::istream content;                                    //[p]响应报文主体
 
-            std::unordered_map<std::string, std::string> header;
+            std::unordered_map<std::string, std::string> header; //[p]存储响应首部
             
         private:
-            boost::asio::streambuf content_buffer;
+            boost::asio::streambuf content_buffer;   //[p]缓冲区
             
-            Response(): content(&content_buffer) {};
+            Response(): content(&content_buffer) {};//[p]响应内容？
         };
     
         std::shared_ptr<Response> request(const std::string& request_type, const std::string& path="/", 
@@ -32,7 +33,7 @@ namespace SimpleWeb {
             std::stringstream empty_ss;
             return request(request_type, path, empty_ss, header);
         }
-        
+        //[p]request方法重载，客户端请求方法
         std::shared_ptr<Response> request(const std::string& request_type, const std::string& path, std::ostream& content, 
                 const std::map<std::string, std::string>& header=std::map<std::string, std::string>()) {
             std::string corrected_path=path;
@@ -42,10 +43,12 @@ namespace SimpleWeb {
             content.seekp(0, std::ios::end);
             size_t content_length=content.tellp();
             content.seekp(0, std::ios::beg);
-            
+            //[p]下面用write_buffer来构造一个完整的HTTP请求
             boost::asio::streambuf write_buffer;
             std::ostream write_stream(&write_buffer);
+            //[p]构造请求行
             write_stream << request_type << " " << corrected_path << " HTTP/1.1\r\n";
+            //[p]构造首部
             write_stream << "Host: " << host << "\r\n";
             for(auto& h: header) {
                 write_stream << h.first << ": " << h.second << "\r\n";
@@ -53,26 +56,29 @@ namespace SimpleWeb {
             if(content_length>0)
                 write_stream << "Content-Length: " << std::to_string(content_length) << "\r\n";
             write_stream << "\r\n";
+            //[p]构造请求主体
             if(content_length>0)
                 write_stream << content.rdbuf();
-            
+
             std::shared_ptr<Response> response(new Response());
             
             try {
+            	//[p]请求连接
                 connect();
-                              
+                //[p]asio::write写，发送http请求
                 boost::asio::write(*socket, write_buffer);
-                
+                //[p]接收响应报文内容
                 size_t bytes_transferred = boost::asio::read_until(*socket, response->content_buffer, "\r\n\r\n");
-                
+                //[p]计算响应报文主体的长度
                 size_t num_additional_bytes=response->content_buffer.size()-bytes_transferred;
-                
+                //[p]解析响应首部
                 parse_response_header(response, response->content);
-                                
+                //[p]读取响应报文主体
                 if(response->header.count("Content-Length")>0) {
                     boost::asio::read(*socket, response->content_buffer, 
                             boost::asio::transfer_exactly(stoull(response->header["Content-Length"])-num_additional_bytes));
                 }
+                //[p]没看懂
                 else if(response->header.count("Transfer-Encoding")>0 && response->header["Transfer-Encoding"]=="chunked") {
                     boost::asio::streambuf streambuf;
                     std::ostream content(&streambuf);
@@ -120,12 +126,12 @@ namespace SimpleWeb {
         boost::asio::ip::tcp::endpoint asio_endpoint;
         boost::asio::ip::tcp::resolver asio_resolver;
         
-        std::shared_ptr<socket_type> socket;
+        std::shared_ptr<socket_type> socket;     //[p]socket
         bool socket_error;
         
         std::string host;
         unsigned short port;
-                
+        //[p]构造函数，指定服务器的地址和端口
         ClientBase(const std::string& host_port, unsigned short default_port) : 
                 asio_resolver(asio_io_service), socket_error(false) {
             size_t host_end=host_port.find(':');
@@ -142,17 +148,18 @@ namespace SimpleWeb {
         }
         
         virtual void connect()=0;
-        
+        //[p]解析响应首部
         void parse_response_header(std::shared_ptr<Response> response, std::istream& stream) const {
             std::string line;
+            //[p]读取一行首部内容
             getline(stream, line);
             size_t version_end=line.find(' ');
             if(version_end!=std::string::npos) {
                 if(5<line.size())
-                    response->http_version=line.substr(5, version_end-5);
+                    response->http_version=line.substr(5, version_end-5);    //[p]协议版本号
                 if((version_end+1)<line.size())
-                    response->status_code=line.substr(version_end+1, line.size()-(version_end+1)-1);
-
+                    response->status_code=line.substr(version_end+1, line.size()-(version_end+1)-1);  //[p]状态码
+                //[p]下面循环读取响应首部
                 getline(stream, line);
                 size_t param_end;
                 while((param_end=line.find(':'))!=std::string::npos) {
@@ -178,11 +185,13 @@ namespace SimpleWeb {
     template<>
     class Client<HTTP> : public ClientBase<HTTP> {
     public:
+    	//[p]构造函数，创建tcp套接字，在父类中指定服务器的地址和端口
         Client(const std::string& server_port_path) : ClientBase<HTTP>::ClientBase(server_port_path, 80) {
             socket=std::make_shared<HTTP>(asio_io_service);
         }
         
     private:
+        //[p]请求连接
         void connect() {
             if(socket_error || !socket->is_open()) {
                 boost::asio::ip::tcp::resolver::query query(host, std::to_string(port));

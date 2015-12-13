@@ -107,23 +107,25 @@ namespace SimpleWeb {
         };
         ///Set before calling start().
         Config config;
-        
+        //[p]请求处理方法集合，这里是双重map,key1-->string:执行资源类型，如json,info,string等；key2-->string:指向请求类型get,post等；value-->function指向处理方法，用法可以参考http_examples.cpp-->main
         std::unordered_map<std::string, std::unordered_map<std::string, 
             std::function<void(typename ServerBase<socket_type>::Response&, std::shared_ptr<typename ServerBase<socket_type>::Request>)> > >  resource;
-        
+        //[p]没有匹配到resource中的处理方法，采用default_resource中的资源默认处理方式
         std::unordered_map<std::string, 
             std::function<void(typename ServerBase<socket_type>::Response&, std::shared_ptr<typename ServerBase<socket_type>::Request>)> > default_resource;
 
     private:
+        //[p]存储请求处理方法
         std::vector<std::pair<std::string, std::vector<std::pair<boost::regex,
             std::function<void(typename ServerBase<socket_type>::Response&, std::shared_ptr<typename ServerBase<socket_type>::Request>)> > > > > opt_resource;
         
     public:
         void start() {
             //Copy the resources to opt_resource for more efficient request processing
+        	//[p]将resources中的处理方法复制到opt_Resource中，为了效率，在find_resource函数中被调用
             opt_resource.clear();
             for(auto& res: resource) {
-                for(auto& res_method: res.second) {
+                for(auto& res_method: res.second) {  //[p]此时的res_method是一个pair类型，first指向请求方法(get\post)，second指向请求处理方法
                     auto it=opt_resource.end();
                     for(auto opt_it=opt_resource.begin();opt_it!=opt_resource.end();opt_it++) {
                         if(res_method.first==opt_it->first) {
@@ -139,22 +141,22 @@ namespace SimpleWeb {
                     it->second.emplace_back(boost::regex(res.first), res_method.second);
                 }
             }
-
+            //[p]重启事件循环
             if(io_service.stopped())
                 io_service.reset();
-
+            //[p]配置地址和端口
             boost::asio::ip::tcp::endpoint endpoint;
             if(config.address.size()>0)
                 endpoint=boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string(config.address), config.port);
             else
                 endpoint=boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), config.port);
-            acceptor.open(endpoint.protocol());
-            acceptor.set_option(boost::asio::socket_base::reuse_address(config.reuse_address));
-            acceptor.bind(endpoint);
-            acceptor.listen();
-     
+            acceptor.open(endpoint.protocol()); //[p]打开端口
+            acceptor.set_option(boost::asio::socket_base::reuse_address(config.reuse_address));//[p]设置端口选项
+            acceptor.bind(endpoint);                      //[p]绑定端口
+            acceptor.listen();                                       //[p]监听端口
+            //[p]accept是虚函数，接受请求，需要子类自己实现
             accept(); 
-            
+            //[p]如果num_threads参数大于1，则需要构造线程池
             //If num_threads>1, start m_io_service.run() in (num_threads-1) threads for thread-pooling
             threads.clear();
             for(size_t c=1;c<config.num_threads;c++) {
@@ -184,16 +186,17 @@ namespace SimpleWeb {
         
         size_t timeout_request;
         size_t timeout_content;
-        
+        //[p]构造函数
         ServerBase(unsigned short port, size_t num_threads, size_t timeout_request, size_t timeout_send_or_receive) : 
                 config(port, num_threads), acceptor(io_service),
                 timeout_request(timeout_request), timeout_content(timeout_send_or_receive) {}
-        
+        //[p]虚函数，接受请求，需要子类自己实现
         virtual void accept()=0;
-        
+        //[p]设置socket上的等待时间，超时就关闭socket
         std::shared_ptr<boost::asio::deadline_timer> set_timeout_on_socket(std::shared_ptr<socket_type> socket, size_t seconds) {
             std::shared_ptr<boost::asio::deadline_timer> timer(new boost::asio::deadline_timer(io_service));
             timer->expires_from_now(boost::posix_time::seconds(seconds));
+            //[p]调用aync_wait异步等待seconds
             timer->async_wait([socket](const boost::system::error_code& ec){
                 if(!ec) {
                     boost::system::error_code ec;
@@ -203,7 +206,7 @@ namespace SimpleWeb {
             });
             return timer;
         }
-        
+        //[p]重载set_timeout_on_socket，区别是aync_Wait用了协程
         std::shared_ptr<boost::asio::deadline_timer> set_timeout_on_socket(std::shared_ptr<socket_type> socket, std::shared_ptr<Request> request, size_t seconds) {
             std::shared_ptr<boost::asio::deadline_timer> timer(new boost::asio::deadline_timer(io_service));
             timer->expires_from_now(boost::posix_time::seconds(seconds));
@@ -224,12 +227,14 @@ namespace SimpleWeb {
             request->read_remote_endpoint_data(*socket);
 
             //Set timeout on the following boost::asio::async-read or write function
+            //[p]设置异步读写的超时时间
             std::shared_ptr<boost::asio::deadline_timer> timer;
             if(timeout_request>0)
                 timer=set_timeout_on_socket(socket, timeout_request);
-                        
+            //[p]异步读
             boost::asio::async_read_until(*socket, request->streambuf, "\r\n\r\n",
                     [this, socket, request, timer](const boost::system::error_code& ec, size_t bytes_transferred) {
+            	//异步读的回调函数
                 if(timeout_request>0)
                     timer->cancel();
                 if(!ec) {
@@ -238,10 +243,11 @@ namespace SimpleWeb {
                     //The chosen solution is to extract lines from the stream directly when parsing the header. What is left of the
                     //streambuf (maybe some bytes of the content) is appended to in the async_read-function below (for retrieving content).
                     size_t num_additional_bytes=request->streambuf.size()-bytes_transferred;
-                    
+                    //[p]解析请求行和首部内容
                     parse_request(request, request->content);
                     
                     //If content, read that as well
+                    //[p]读取首部选项中的 请求主体内容的长度
                     const auto it=request->header.find("Content-Length");
                     if(it!=request->header.end()) {
                         //Set timeout on the following boost::asio::async-read or write function
@@ -255,6 +261,7 @@ namespace SimpleWeb {
                         catch(const std::exception &e) {
                             return;
                         }
+                        //[p]异步读取主体内容
                         boost::asio::async_read(*socket, request->streambuf, 
                                 boost::asio::transfer_exactly(content_length-num_additional_bytes),
                                 [this, socket, request, timer]
@@ -271,7 +278,7 @@ namespace SimpleWeb {
                 }
             });
         }
-
+        //[p]解析请求行和首部
         void parse_request(std::shared_ptr<Request> request, std::istream& stream) const {
             std::string line;
             getline(stream, line);
@@ -279,14 +286,14 @@ namespace SimpleWeb {
             if((method_end=line.find(' '))!=std::string::npos) {
                 size_t path_end;
                 if((path_end=line.find(' ', method_end+1))!=std::string::npos) {
-                    request->method=line.substr(0, method_end);
-                    request->path=line.substr(method_end+1, path_end-method_end-1);
+                    request->method=line.substr(0, method_end);                                                            //[p]解析请求方法
+                    request->path=line.substr(method_end+1, path_end-method_end-1);               //[p]解析资源路径
                     if((path_end+6)<line.size())
-                        request->http_version=line.substr(path_end+6, line.size()-(path_end+6)-1);
+                        request->http_version=line.substr(path_end+6, line.size()-(path_end+6)-1); //[p]解析http请求版本
                     else
                         request->http_version="1.0";
 
-                    getline(stream, line);
+                    getline(stream, line); //[p]读取首部行
                     size_t param_end;
                     while((param_end=line.find(':'))!=std::string::npos) {
                         size_t value_start=param_end+1;
@@ -294,22 +301,22 @@ namespace SimpleWeb {
                             if(line[value_start]==' ')
                                 value_start++;
                             if(value_start<line.size())
-                                request->header.insert(std::make_pair(line.substr(0, param_end), line.substr(value_start, line.size()-value_start-1)));
+                                request->header.insert(std::make_pair(line.substr(0, param_end), line.substr(value_start, line.size()-value_start-1))); //[p]request-->header存储首部选项
                         }
     
-                        getline(stream, line);
+                        getline(stream, line); //[p]循环读取首部行
                     }
                 }
             }
         }
-
+        //[p]请求响应
         void find_resource(std::shared_ptr<socket_type> socket, std::shared_ptr<Request> request) {
             //Find path- and method-match, and call write_response
             for(auto& res: opt_resource) {
-                if(request->method==res.first) {            //[p]匹配请求方法
+                if(request->method==res.first) {            //[p]匹配请求方法，get，post
                     for(auto& res_path: res.second) {
                         boost::smatch sm_res;
-                        if(boost::regex_match(request->path, sm_res, res_path.first)) { //[p]匹配资源类型，比如POST中的string\json等
+                        if(boost::regex_match(request->path, sm_res, res_path.first)) { //[p]匹配资源，比如POST中的string\json等
                             request->path_match=std::move(sm_res);
                             write_response(socket, request, res_path.second);  //发送响应
                             return;
@@ -317,12 +324,13 @@ namespace SimpleWeb {
                     }
                 }
             }
+            //[p]无匹配，发送默认响应内容
             auto it_method=default_resource.find(request->method);
             if(it_method!=default_resource.end()) {
                 write_response(socket, request, it_method->second);
             }
         }
-        //[p]resource_function是回调函数，不同的资源响应方式不同
+        //[p]write_response发送响应内容，其中参数resource_function是各个请求方式的回调函数，不同的资源响应方式不同
         void write_response(std::shared_ptr<socket_type> socket, std::shared_ptr<Request> request, 
                 std::function<void(typename ServerBase<socket_type>::Response&, std::shared_ptr<typename ServerBase<socket_type>::Request>)>& resource_function) {
             //Set timeout on the following boost::asio::async-read or write function
@@ -360,6 +368,7 @@ namespace SimpleWeb {
                     return;
                 }
                 if(http_version>1.05)
+                	//[p]继续读取请求行和请求首部，可能是长连接
                     read_request_and_content(socket);
             });
         }
@@ -384,12 +393,13 @@ namespace SimpleWeb {
                         
             acceptor.async_accept(*socket, [this, socket](const boost::system::error_code& ec){
                 //Immediately start accepting a new connection
+            	//[p]立刻开始接受新的连接
                 accept();
                                 
                 if(!ec) {
                     boost::asio::ip::tcp::no_delay option(true);
                     socket->set_option(option);
-                    
+                    //[p]读取请求行和请求首部
                     read_request_and_content(socket);
                 }
             });
